@@ -1,82 +1,52 @@
 from flask import Flask, request, redirect, render_template
+import cgi
 import re
 
-import os
-import jinja2
+app = Flask(__name__)
 
-template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir),
-                               autoescape = True)
+app.config['DEBUG'] = True
 
-def render_str(template, **params):
-    t = jinja_env.get_template(template)
-    return t.render(params)
+@app.route("/welcome", methods=['POST'])
+def welcome():
+    isError = False
+    username = request.form['username']
+    password = request.form['password']
+    password_verify = request.form['password_verify']
+    email = request.form['email']
 
-class BaseHandler(webapp2.RequestHandler):
-    def render(self, template, **kw):
-        self.response.out.write(render_str(template, **kw))
+    params = dict(username = username, email = email)
 
-    def write(self, *a, **kw):
-        self.response.out.write(*a, **kw)
+    if not bool(re.match(r"^[a-zA-Z0-9_-]{3,20}$", username)):
+        params['uerror'] = "Invalid Username"
+        isError = True
+    
+    if not bool(re.match(r"^.{3,20}$", password)):
+        params['perror'] = "Invalid Password"
+        isError = True
 
+    if password != password_verify:
+        params['verror'] = "Passwords do not match"
+        isError = True
 
-USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
-def valid_username(username):
-    return username and USER_RE.match(username)
-
-PASS_RE = re.compile(r"^.{3,20}$")
-def valid_password(password):
-    return password and PASS_RE.match(password)
-
-EMAIL_RE = re.compile(r"^[\S]+@[\S]+\.[\S]+$")
-def valid_email(email):
-    return not email or EMAIL_RE.match(email)
-
-
-class MainHandler(BaseHandler):
-
-    def get(self):
-        self.render("signup.html")
-
-    def post(self):
-        errorquest = False
-        username = self.request.get('username')
-        password = self.request.get('password')
-        verify = self.request.get('verify')
-        email = self.request.get('email')
-
-        params = dict(username = username, email = email)
-
-        if not valid_username(username):
-            params['error_username'] = "That's not your name."
-            errorquest = True
-
-        if not valid_password(password):
-            params['error_password'] = "Trying to brute force this?"
-            errorquest = True
-
-        elif password != verify:
-            params['error_verify'] = "You mistyped."
-            errorquest = True
-
-        if not valid_email(email):
-            params['error_email'] = "This ain't no dot net."
-            errorquest = True
-
-        if errorquest:
-            self.render('signup.html', **params)
+    if email != "":
+        if not bool(re.match(r"^[\S]+@[\S]+\.[\S]+$", email)):
+            params['emerror'] = "Invalid Email"
+            isError = True
         else:
-            self.redirect('/welcome?username=' + username)
+            return render_template('welcome.html', username = username)
 
-class Welcome(BaseHandler):
-    def get(self):
-        username = self.request.get('username')
-        if valid_username(username):
-            self.render('welcome.html', username=username)
-        else:
-            self.redirect('/')
+    if isError:
+        return render_template('base.html', **params)
+    else:
+        return render_template('welcome.html', username = username)
 
-app = webapp2.WSGIApplication([
-    ('/', MainHandler),
-    ('/welcome', Welcome)
-], debug=True)
+
+    
+@app.route("/")    
+def index():
+    
+    error = request.args.get("error")
+    
+    return render_template('base.html', error = error)
+
+app.run()
